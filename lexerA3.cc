@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <map>
+#include <stack>
 
 #include "lexer.h"
 #include "inputbuf.h"
@@ -24,13 +25,15 @@ TokenType tempTokenType;
 
 std::map<string, string> typeMap;
 std::map<string, vector<string> > unknownGroups;
-
 struct Node
 {
     string val;
-    string type;
+    TokenType type;
 };
 
+std::stack<Node> operators;
+std::stack<Node> variables;
+bool errorFound = false;
 
 void add_to_map(const std::string& str, string type) {
     typeMap[str] = type;
@@ -376,11 +379,144 @@ void parse_globalVars(void){
     tempTokenType = lexer.UngetToken(token);
 }
 
+void evaluate(Node op, Node var1, Node var2){
+    if(op.type == NOT){
+        if(var1.type == ID){
+            if (typeMap.find(var1.val) != typeMap.end()){
+                if(typeMap[var1.val] != "bool"){
+                    cout << "TYPE MISMATCH "<< token.line_no <<" C3\n";
+                    exit(1);
+                }
+            } else {
+                typeMap[var1.val] = "bool";
+            }
+        }
+    }
+}
+
+bool parse_expression(string expected){
+    token = lexer.GetToken();
+    int vars_needed = 0;
+    while(token.token_type != SEMICOLON){
+        Node curr_node = {token.lexeme, token.token_type};
+        Node op;
+        Node var;
+        if(token.token_type == PLUS || token.token_type == MINUS || token.token_type == MULT || token.token_type == DIV){
+            // return value is same as input, both inputs have same type
+            vars_needed = 2;
+            operators.push(curr_node);
+        } else if(token.token_type == GREATER || token.token_type == LESS || token.token_type == GTEQ || token.token_type == LTEQ || token.token_type == NOTEQUAL || token.token_type == EQUAL){
+            // return value is bool, both inputs are same type
+            vars_needed = 2;
+            operators.push(curr_node);
+        } else if(token.token_type = NOT){
+            // return value is bool input is bool
+            vars_needed = 1;
+            operators.push(curr_node);
+        } else if(token.token_type == ID){
+            // id 
+            if(vars_needed == 1){
+                op = operators.top();
+                operators.pop();
+                if(op.type != NOT){
+                    var = variables.top();
+                    variables.pop();
+                } else {
+                    if(curr_node.type == ID){
+                        if (typeMap.find(curr_node.val) != typeMap.end()){
+                            if(typeMap[curr_node.val] != "bool"){
+                                cout << "TYPE MISMATCH "<< token.line_no <<" C3\n";
+                                errorFound = false;
+                                return false;
+                            }
+                        } else {
+                            typeMap[curr_node.val] = "bool";
+                        }
+                    }
+                }
+            } else {
+                variables.push(curr_node);
+                vars_needed--;
+            }
+        } else if(token.token_type == INT || token.token_type == REAL || token.token_type == BOOL){
+            // static values
+            if(vars_needed == 1){
+                op = operators.top();
+                var = variables.top();
+                operators.pop();
+                variables.pop();
+            } else {
+                variables.push(curr_node);
+                vars_needed--;
+            }
+        }
+        token = lexer.GetToken();
+    } // statement is parsed till RPAREN
+    return "";
+}
+
+// int parse_ifstmt(void){
+//     int tempI;
+//     token = lexer.GetToken();
+//     if(token.token_type == IF){
+//         token = lexer.GetToken();
+//         if(token.token_type == LPAREN){
+//             parse_expression("bool");
+//             token = lexer.GetToken();
+//             if(token.token_type == RPAREN){
+//                 cout << "\n Rule parsed: ifstmt -> IF LPAREN expression RPAREN body \n";
+//                 // parse_body();
+                
+//             }else{
+//                 cout << "\n Syntax Error \n";
+//             }
+//         }else{
+//             cout << "\n Syntax Error \n";
+//         }    
+//     }else{
+//         cout << "\n Syntax Error \n";
+//     }
+//     return(0);
+// }
+
+void parse_stmt(void){
+    int tempI;
+    token = lexer.GetToken();
+    string expected;
+    if(token.token_type == ID){
+        // cout << "\n Rule parsed: stmt -> assignment_stmt \n";
+        // tempI = parse_assstmt();        
+        if(typeMap.find(token.lexeme) != typeMap.end()){
+            expected = typeMap[token.lexeme];
+        } else {
+            typeMap[token.lexeme] = "int";
+        } 
+        token = lexer.GetToken();
+        if(parse_expression(expected)){
+            cout << "TYPE MISMATCH "<< token.line_no <<" C1\n";
+            errorFound = true;
+        }
+    // }else if(token.token_type == IF){
+    //     tempTokenType = lexer.UngetToken(token);
+    //     // cout << "\n Rule parsed: stmt -> if_stmt";
+    //     tempI = parse_ifstmt();
+    // }else if(token.token_type == WHILE){
+    //     tempTokenType = lexer.UngetToken(token);
+    //     // cout << "\n Rule parsed: stmt -> while_stmt";
+    //     // tempI = parse_whilestmt();
+    // }else if(token.token_type == SWITCH){
+    //     tempTokenType = lexer.UngetToken(token);
+    //     // cout << "\n Rule parsed: stmt -> switch_stmt";
+    //     // tempI = parse_switchstmt();
+    // }else{
+    //     cout << "\n Syntax Error \n";
+    }
+}
+
 void parse_body(void){
     token = lexer.GetToken();
     while(token.token_type != RBRACE){
-        // cout << "parsing body line by line\n";
-        //parse_stmtlist();
+        parse_stmt();
         token = lexer.GetToken();
     }
 }
@@ -417,5 +553,6 @@ int main()
     // cout << "Start \n";
     i = parse_program();
     // cout << "\n End of Program \n";
-    display();
+    if(!errorFound)
+        display();
 }
