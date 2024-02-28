@@ -397,7 +397,7 @@ void evaluate(Node op, Node var1, Node var2){
 bool parse_expression(string expected){
     token = lexer.GetToken();
     int vars_needed = 0;
-    while(token.token_type != SEMICOLON){
+    while(token.token_type != SEMICOLON || token.token_type != RPAREN){
         Node curr_node = {token.lexeme, token.token_type};
         Node op;
         Node var;
@@ -426,7 +426,7 @@ bool parse_expression(string expected){
                         if (typeMap.find(curr_node.val) != typeMap.end()){
                             if(typeMap[curr_node.val] != "bool"){
                                 cout << "TYPE MISMATCH "<< token.line_no <<" C3\n";
-                                errorFound = false;
+                                errorFound = true;
                                 return false;
                             }
                         } else {
